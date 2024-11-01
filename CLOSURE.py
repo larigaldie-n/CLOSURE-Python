@@ -4,6 +4,7 @@ from math import sqrt
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
 import csv
+import progressbar
 
 # The function that each core will process independently
 def dfs_branch(start_combination, running_sum_init, running_m2_init, n, target_sum_upper, target_sum_lower, target_sd_upper, target_sd_lower, min_scale_sum, max_scale_sum, output_file, n_1, max_scale_1):
@@ -11,7 +12,7 @@ def dfs_branch(start_combination, running_sum_init, running_m2_init, n, target_s
     stack.put((start_combination, running_sum_init, running_m2_init))
     results = []  # Collect valid combinations in memory
     with open(output_file, 'a', newline='') as f:
-        writer = csv.writer(f)
+        #writer = csv.writer(f)
         while not stack.empty():
             current, running_sum, running_m2 = stack.get()
             
@@ -36,7 +37,7 @@ def dfs_branch(start_combination, running_sum_init, running_m2_init, n, target_s
                 if maxmean < target_sum_lower:
                     continue
                 
-                # sd calculations
+                # sd calculations and filter
                 next_mean = next_sum / next_n
                 delta = next_value - running_sum / len(current)
                 delta2 = next_value - next_mean
@@ -81,6 +82,14 @@ def parallel_dfs(min_scale, max_scale, n, target_sum, target_sd, rounding_error_
     #with Manager() as manager:
     #    lock = manager.Lock()
 
+    # Progress bar set up
+    widgets = ['Finding combinations: ',
+           progressbar.Bar('*'),
+          ]
+    bar = progressbar.ProgressBar(max_value=len(initial_combinations),
+                                  widgets=widgets).start()
+    progress = 0
+
     # Use ProcessPoolExecutor to parallelize DFS
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         futures = [executor.submit(dfs_branch, combo, running_sum, running_m2, n, target_sum_upper, target_sum_lower, target_sd_upper, target_sd_lower, min_scale_sum, max_scale_sum, output_file, n_1, max_scale_1) 
@@ -89,12 +98,16 @@ def parallel_dfs(min_scale, max_scale, n, target_sum, target_sd, rounding_error_
         with open(output_file, 'a', newline='') as f:
             writer = csv.writer(f)
             for future in as_completed(futures):
+                progress +=1
+                bar.update(progress)
                 batch_results = future.result()
                 writer.writerows(batch_results)
 
             #for future in as_completed(futures):
             #    future.result()
-
+    
+    # Can be necessary for the very fast calculations
+    bar.update(progress)
     # Time taken
     et = time.time() - st
     print(f"Execution time: {et:.2f} seconds")
@@ -104,12 +117,12 @@ def parallel_dfs(min_scale, max_scale, n, target_sum, target_sd, rounding_error_
         reader = csv.reader(f)
         print(f"Number of valid combinations: {sum(1 for _ in reader)-1}")
 
-# Ensure code only runs when called as the main module
+# Ensure code only runs when called as the main module (necessary for parallel processing)
 if __name__ == '__main__':
     # Initialize parameters
     min_scale = 1
     max_scale = 7
-    n = 30  # number of people
+    n = 30 # number of people/items
     target_mean = 5
     target_sum = target_mean * n
     target_sd = 2.78
