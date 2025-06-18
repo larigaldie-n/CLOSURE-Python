@@ -11,45 +11,46 @@ def dfs_branch(start_combination, running_sum_init, running_m2_init, n, target_s
     stack = LifoQueue()
     stack.put((start_combination, running_sum_init, running_m2_init))
     results = []  # Collect valid combinations in memory
-    with open(output_file, 'a', newline='') as f:
+    #with open(output_file, 'a', newline='') as f:
         #writer = csv.writer(f)
-        while not stack.empty():
-            current, running_sum, running_m2 = stack.get()
+    while not stack.empty():
+        current, running_sum, running_m2 = stack.get()
             
-            if len(current) >= n:
-                current_std = sqrt(running_m2/n_1)#statistics.stdev(current)
-                if target_sd_lower <= current_std:
-                    results.append(current)
-                    #with lock:  # Lock for safe file write
-                    #    writer.writerow(current)
-                        #f.write(",".join(map(str, current)) + "\n")
+        if len(current) >= n:
+            current_std = sqrt(running_m2/n_1)#statistics.stdev(current)
+            if target_sd_lower <= current_std:
+                results.append(current)
+                #with lock:  # Lock for safe file write
+                #    writer.writerow(current)
+                    #f.write(",".join(map(str, current)) + "\n")
+            continue
+        n_left = (n_1 - len(current))
+        next_n = len(current) + 1
+
+        for next_value in range(current[-1], max_scale_1):
+            # Filter based on mean constraints
+            next_sum = running_sum + next_value
+            #minmean = next_sum + min_scale_sum[n_left]
+            minmean = next_sum + min_scale_sum[next_value-1][n_left]
+            if minmean > target_sum_upper:
+                break
+            maxmean = next_sum + max_scale_sum[n_left]
+            if maxmean < target_sum_lower:
                 continue
-            n_left = (n_1 - len(current))
-            next_n = len(current) + 1
+            
+            # sd calculations and filter
+            next_mean = next_sum / next_n
+            delta = next_value - running_sum / len(current)
+            delta2 = next_value - next_mean
+            next_m2 = running_m2 + delta * delta2
+            min_sd = sqrt(next_m2 / (n_1))
+            if min_sd > target_sd_upper:
+                continue
 
-            for next_value in range(current[-1], max_scale_1):
-                # Filter based on mean constraints
-                next_sum = running_sum + next_value
-                minmean = next_sum + min_scale_sum[n_left]
-                if minmean > target_sum_upper:
-                    continue
-                maxmean = next_sum + max_scale_sum[n_left]
-                if maxmean < target_sum_lower:
-                    continue
-                
-                # sd calculations and filter
-                next_mean = next_sum / next_n
-                delta = next_value - running_sum / len(current)
-                delta2 = next_value - next_mean
-                next_m2 = running_m2 + delta * delta2
-                min_sd = sqrt(next_m2 / (n_1))
-                if min_sd > target_sd_upper:
-                    continue
+            # Push the valid combination with updated stats back into the stack
+            stack.put((current + [next_value], next_sum, next_m2))
 
-                # Push the valid combination with updated stats back into the stack
-                stack.put((current + [next_value], next_sum, next_m2))
-
-        return results
+    return results
 
 # Parallel processing part starting from depth n=2
 def parallel_dfs(min_scale, max_scale, n, target_sum, target_sd, rounding_error_sums, rounding_error_sds, num_workers, output_file):
@@ -58,7 +59,8 @@ def parallel_dfs(min_scale, max_scale, n, target_sum, target_sd, rounding_error_
     target_sum_lower = target_sum - rounding_error_sums
     target_sd_upper = target_sd + rounding_error_sds
     target_sd_lower = target_sd - rounding_error_sds
-    min_scale_sum = [min_scale*n for n in range(n)]
+    #min_scale_sum = [min_scale*n for n in range(n)]
+    min_scale_sum = [[min*n for n in range(n)] for min in range(min_scale, max_scale+1)]
     max_scale_sum = [max_scale*n for n in range(n)]
     n_1 = n - 1
     max_scale_1 = max_scale + 1
@@ -122,13 +124,13 @@ if __name__ == '__main__':
     # Initialize parameters
     min_scale = 1
     max_scale = 7
-    n = 30 # number of people/items
-    target_mean = 5
+    n = 150 # number of people/items
+    target_mean = 3
     target_sum = target_mean * n
-    target_sd = 2.78
-    rounding_error_means = 0.01
+    target_sd = 0.75
+    rounding_error_means = 0.05
     rounding_error_sums = rounding_error_means * n
-    rounding_error_sds = 0.01
+    rounding_error_sds = 0.05
     num_workers = cpu_count()  # Number of CPU cores to use
     output_file = 'parallel_results.csv'
 
