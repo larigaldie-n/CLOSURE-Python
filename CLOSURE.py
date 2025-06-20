@@ -1,4 +1,4 @@
-from queue import LifoQueue
+from collections import deque
 import time
 from math import sqrt
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -8,21 +8,15 @@ import progressbar
 
 # The function that each core will process independently
 def dfs_branch(start_combination, running_sum_init, running_m2_init, n, target_sum_upper, target_sum_lower, target_sd_upper, target_sd_lower, min_scale_sum, max_scale_sum, output_file, n_1, max_scale_1):
-    stack = LifoQueue()
-    stack.put((start_combination, running_sum_init, running_m2_init))
+    stack = deque([(start_combination, running_sum_init, running_m2_init)])
     results = []  # Collect valid combinations in memory
-    #with open(output_file, 'a', newline='') as f:
-        #writer = csv.writer(f)
-    while not stack.empty():
-        current, running_sum, running_m2 = stack.get()
+    while stack:
+        current, running_sum, running_m2 = stack.pop()
             
         if len(current) >= n:
-            current_std = sqrt(running_m2/n_1)#statistics.stdev(current)
+            current_std = sqrt(running_m2/n_1)
             if target_sd_lower <= current_std:
                 results.append(current)
-                #with lock:  # Lock for safe file write
-                #    writer.writerow(current)
-                    #f.write(",".join(map(str, current)) + "\n")
             continue
         n_left = (n_1 - len(current))
         next_n = len(current) + 1
@@ -48,7 +42,7 @@ def dfs_branch(start_combination, running_sum_init, running_m2_init, n, target_s
                 continue
 
             # Push the valid combination with updated stats back into the stack
-            stack.put((current + [next_value], next_sum, next_m2))
+            stack.append((current + [next_value], next_sum, next_m2))
 
     return results
 
@@ -80,10 +74,6 @@ def parallel_dfs(min_scale, max_scale, n, target_sum, target_sd, rounding_error_
         writer = csv.writer(f)
         writer.writerow([f'n{i+1}' for i in range(0,n)])
 
-    # Initialize a lock to synchronize file writes between processes
-    #with Manager() as manager:
-    #    lock = manager.Lock()
-
     # Progress bar set up
     widgets = ['Finding combinations: ',
            progressbar.Bar('*'),
@@ -104,9 +94,6 @@ def parallel_dfs(min_scale, max_scale, n, target_sum, target_sd, rounding_error_
                 bar.update(progress)
                 batch_results = future.result()
                 writer.writerows(batch_results)
-
-            #for future in as_completed(futures):
-            #    future.result()
     
     # Can be necessary for the very fast calculations
     bar.update(progress)
@@ -126,8 +113,9 @@ if __name__ == '__main__':
     max_scale = 7
     n = 150 # number of people/items
     target_mean = 3
+    ### Future optimization: mirror higher numbers to lower ones (which are faster)
     target_sum = target_mean * n
-    target_sd = 0.75
+    target_sd = 1
     rounding_error_means = 0.05
     rounding_error_sums = rounding_error_means * n
     rounding_error_sds = 0.05
@@ -136,4 +124,3 @@ if __name__ == '__main__':
 
     # Run parallel DFS
     parallel_dfs(min_scale, max_scale, n, target_sum, target_sd, rounding_error_sums, rounding_error_sds, num_workers, output_file)
-
